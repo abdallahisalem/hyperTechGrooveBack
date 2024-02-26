@@ -2,9 +2,12 @@ package myapp.controller;
 
 import java.util.List;
 
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.rest.webmvc.ResourceNotFoundException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,9 +29,11 @@ import myapp.model.UserResponse;
 public class UserController {
 
 	private final UserRepository userRepository;
+	private final PasswordEncoder passwordEncoder;
 
-	public UserController(UserRepository userRepository, UserService userService) {
+	public UserController(UserRepository userRepository, UserService userService, PasswordEncoder passwordEncoder) {
 		this.userRepository = userRepository;
+		this.passwordEncoder = passwordEncoder;
 	}
 
 	@GetMapping
@@ -38,8 +43,16 @@ public class UserController {
 
 	@PostMapping
 	public ResponseEntity<User> createUser(@RequestBody User user) {
-		User _user = userRepository.save(user);
-		return ResponseEntity.ok(_user);
+		try {
+			// Hash the password before saving
+	        user.setPassword(passwordEncoder.encode(user.getPassword()));
+
+			User _user = userRepository.save(user);
+			return ResponseEntity.ok(_user);
+		} catch (DataIntegrityViolationException e) {
+			// Throw a custom exception with a specific message
+			throw new DuplicateKeyException("Duplicate entry for username or email");
+		}
 	}
 
 	@PostMapping("/{identifier}/{password}")
@@ -47,32 +60,40 @@ public class UserController {
 		User user = userRepository.findByEmail(identifier).orElse(userRepository.findByUsername(identifier).orElseThrow(
 				() -> new ResourceNotFoundException("User not found with username or email: " + identifier)));
 
-		if (!password.equals(user.getPassword())) {
-			throw new BadCredentialsException("Incorrect password");
+		if (!passwordEncoder.matches(password, user.getPassword())) {
+		    throw new BadCredentialsException("Incorrect password");
 		}
 
-		UserResponse userResponse = new UserResponse(user.getId(), user.getUsername(), user.getEmail(),
-				user.getFirstname(), user.getLastname());
 
-		return ResponseEntity.ok(userResponse);
+	    return ResponseEntity.ok(new UserResponse(user.getId(), user.getUsername(), user.getEmail(),
+	            user.getFirstname(), user.getLastname()));
 	}
 
 	@PutMapping("/{id}")
 	public ResponseEntity<UserResponse> updateUser(@PathVariable Long id, @RequestBody User userDetails) {
+
 		User user = userRepository.findById(id)
+
 				.orElseThrow(() -> new ResourceNotFoundException("User not found with id " + id + "fdf"));
-		if (!userDetails.getPassword().equals(user.getPassword())) {
-			throw new BadCredentialsException("Incorrect password");
+		if (!passwordEncoder.matches(userDetails.getPassword(), user.getPassword())) {
+		    throw new BadCredentialsException("Incorrect password");
 		}
-		user.setUsername(userDetails.getUsername());
-		user.setEmail(userDetails.getEmail());
-		user.setFirstname(userDetails.getFirstname());
-		user.setLastname(userDetails.getLastname());
-		User updatedUser = userRepository.save(user);
-		UserResponse userResponse = new UserResponse(updatedUser.getId(), updatedUser.getUsername(),
-				updatedUser.getEmail(), updatedUser.getFirstname(), updatedUser.getLastname());
-		return ResponseEntity.ok(userResponse);
+		try { // Handle potential duplicate entry exception during update
+			user.setUsername(userDetails.getUsername());
+			user.setEmail(userDetails.getEmail());
+			user.setFirstname(userDetails.getFirstname());
+			user.setLastname(userDetails.getLastname());
+			User updatedUser = userRepository.save(user);
+			
+		
+			UserResponse userResponse = new UserResponse(updatedUser.getId(), updatedUser.getUsername(),
+					updatedUser.getEmail(), updatedUser.getFirstname(), updatedUser.getLastname());
+			return ResponseEntity.ok(userResponse);
+		} catch (DataIntegrityViolationException e) {
+			throw new DuplicateKeyException("Duplicate entry for username or email");
+		}
 	}
+
 
 	@DeleteMapping("/{id}")
 	public ResponseEntity<?> deleteUser(@PathVariable Long id) {
