@@ -1,0 +1,36 @@
+# IDE/Build tools
+target/
+.idea/
+.eclipse/
+.project
+.classpath
+*.iml
+
+# Logs
+*.log
+
+# Output directories
+*.war
+*.ear
+*.jar
+
+# OS specific temporary files
+.DS_Store*
+Thumbs.db
+
+# Version control metadata
+.git/
+.svn/
+*.swo
+
+# Test coverage reports
+**/coverage*/
+**/surefire-reports/
+
+# Spring Boot specific
+**/application.properties.local
+**/application.yml.local
+**/bootstrap.yml.local
+
+# Database driver configuration
+**/jdbc-driver/*.jar
